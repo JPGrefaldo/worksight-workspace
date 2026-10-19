@@ -1,0 +1,8 @@
+{
+  "_doc": "Copy to workspace.local.json (gitignored) and keep only what this machine needs. root: folder holding the clones (default: the folder above this repo, or $GNA_CODE). paths: per-repo overrides, keyed by repo name. protocol: https (default) or ssh, used only when cloning.",
+  "root": "~/code",
+  "paths": {
+    "worksight": "~/work/worksight"
+  },
+  "protocol": "ssh"
+}

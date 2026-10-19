@@ -1,0 +1,35 @@
+{
+  "_doc": "Repos kept side by side with this workspace. dir defaults to the repo name. push: auto = bin/sync commits and pushes it; manual = never pushed by bin/sync (branch + PR). attach: always = cloned/attached every session; on-demand = only when a task needs it.",
+  "repos": [
+    {
+      "repo": "GAPartners/worksight",
+      "push": "manual",
+      "attach": "always",
+      "purpose": "The monolith. JIRA work only, on a branch, through a PR. Personal notes never go here."
+    },
+    {
+      "repo": "JPGrefaldo/worksight-planning-docs",
+      "push": "auto",
+      "attach": "always",
+      "purpose": "Planning docs and scripts for WorkSight tickets."
+    },
+    {
+      "repo": "GAPartners/gna-brain",
+      "push": "manual",
+      "attach": "always",
+      "purpose": "Team knowledge base. main is protected; every change lands through a PR."
+    },
+    {
+      "repo": "GAPartners/gna-worklog",
+      "push": "manual",
+      "attach": "on-demand",
+      "purpose": "Team epics, per-PR handoffs, ingest inbox."
+    },
+    {
+      "repo": "GAPartners/gna-atlas",
+      "push": "manual",
+      "attach": "on-demand",
+      "purpose": "Wiki projected from gna-brain. Read-only: never author here, change the brain note instead."
+    }
+  ]
+}

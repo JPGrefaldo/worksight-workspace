@@ -1,0 +1,181 @@
+#!/usr/bin/env node
+// Keeps every repo in repos.json cloned and current, side by side with this workspace.
+//
+//   bin/sync            clone missing repos, pull everything, commit + push the push:auto repos
+//   bin/sync status     local state only (add --fetch to refresh remote refs first)
+//   bin/sync --hook     SessionStart mode: pull only, never commits or pushes, always exits 0
+//
+// Flags: --no-clone (sync without cloning), --all (also clone attach:on-demand repos)
+'use strict';
+
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { spawnSync } = require('child_process');
+
+const WORKSPACE = path.resolve(__dirname, '..');
+const CLOUD = process.env.CLAUDE_CODE_REMOTE === 'true';
+const args = process.argv.slice(2);
+const flag = (f) => args.includes(f);
+const mode = flag('--hook') ? 'hook' : args.find((a) => !a.startsWith('-')) || 'sync';
+
+if (!['sync', 'status', 'hook'].includes(mode)) {
+  console.error(`unknown command "${mode}" — use: bin/sync [status] [--hook] [--fetch] [--no-clone] [--all]`);
+  process.exit(2);
+}
+
+function readJson(file, fallback) {
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch (e) {
+    if (e.code === 'ENOENT' && fallback !== undefined) return fallback;
+    throw new Error(`${file}: ${e.message}`);
+  }
+}
+
+const expandHome = (p) => p.replace(/^~(?=$|\/)/, os.homedir());
+const manifest = readJson(path.join(WORKSPACE, 'repos.json'));
+const local = readJson(path.join(WORKSPACE, 'workspace.local.json'), {});
+const root = path.resolve(WORKSPACE, expandHome(local.root || process.env.GNA_CODE || '..'));
+
+function dirFor(entry) {
+  const override = (local.paths || {})[entry.name];
+  return override ? path.resolve(WORKSPACE, expandHome(override)) : path.join(root, entry.dir || entry.name);
+}
+
+function git(cwd, gitArgs, timeout = mode === 'hook' ? 20000 : 120000) {
+  const r = spawnSync('git', gitArgs, {
+    cwd,
+    encoding: 'utf8',
+    timeout,
+    env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+  });
+  const err = (r.stderr || '').trim() || (r.error ? r.error.message : '');
+  return { ok: r.status === 0, out: (r.stdout || '').trim(), err: err.split('\n').pop() };
+}
+
+function inspect(dir) {
+  const branch = git(dir, ['rev-parse', '--abbrev-ref', 'HEAD']).out;
+  const dirty = git(dir, ['status', '--porcelain']).out !== '';
+  // Untracked files never block a fast-forward: git itself refuses to overwrite one.
+  const dirtyTracked = git(dir, ['status', '--porcelain', '--untracked-files=no']).out !== '';
+  const up = git(dir, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']);
+  const state = { branch, dirty, dirtyTracked, upstream: up.ok ? up.out : null, ahead: 0, behind: 0 };
+  if (state.upstream) {
+    const counts = git(dir, ['rev-list', '--left-right', '--count', 'HEAD...@{u}']).out.split(/\s+/);
+    state.ahead = Number(counts[0]) || 0;
+    state.behind = Number(counts[1]) || 0;
+  }
+  return state;
+}
+
+function fetchUpstream(dir, upstream) {
+  // Fetch only the tracked branch: a full fetch of the monolith is slow and not needed here.
+  const remote = git(dir, ['config', `branch.${git(dir, ['rev-parse', '--abbrev-ref', 'HEAD']).out}.remote`]).out || 'origin';
+  const branch = upstream.slice(remote.length + 1);
+  return git(dir, ['fetch', '--quiet', remote, branch]);
+}
+
+function cloneUrl(repo) {
+  return local.protocol === 'ssh' ? `git@github.com:${repo}.git` : `https://github.com/${repo}.git`;
+}
+
+const self = { name: path.basename(WORKSPACE), repo: '(this workspace)', push: 'auto', attach: 'always', self: true };
+const entries = [self, ...manifest.repos.map((r) => ({ name: r.repo.split('/')[1], ...r }))];
+const rows = [];
+const toAttach = [];
+let failed = false;
+
+for (const entry of entries) {
+  const dir = entry.self ? WORKSPACE : dirFor(entry);
+  const row = { name: entry.name, branch: '', notes: [] };
+  rows.push(row);
+
+  if (!fs.existsSync(path.join(dir, '.git'))) {
+    if (entry.attach === 'on-demand' && !flag('--all')) {
+      row.notes.push('not cloned (on-demand)');
+    } else if (CLOUD) {
+      row.notes.push('MISSING — attach it');
+      toAttach.push({ ...entry, dir });
+    } else if (mode === 'sync' && !flag('--no-clone')) {
+      const r = git(path.dirname(dir), ['clone', '--quiet', cloneUrl(entry.repo), dir], 600000);
+      row.notes.push(r.ok ? 'cloned' : `clone failed: ${r.err}`);
+      if (!r.ok) failed = true;
+    } else {
+      row.notes.push('missing — run bin/sync');
+    }
+    continue;
+  }
+
+  if (!entry.self) {
+    const origin = git(dir, ['remote', 'get-url', 'origin']).out.toLowerCase();
+    if (!origin.includes(entry.repo.toLowerCase())) {
+      row.notes.push(`SKIPPED: origin is ${origin || 'unset'}, expected ${entry.repo}`);
+      failed = true;
+      continue;
+    }
+  }
+
+  // Auto-commit only on a laptop: in a cloud session the agent commits with proper messages itself.
+  if (mode === 'sync' && entry.push === 'auto' && !CLOUD && inspect(dir).dirty) {
+    git(dir, ['add', '-A']);
+    const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
+    const r = git(dir, ['commit', '--quiet', '-m', `sync: ${stamp}`]);
+    row.notes.push(r.ok ? 'committed' : `commit failed: ${r.err}`);
+    if (!r.ok) failed = true;
+  }
+
+  let s = inspect(dir);
+  row.branch = s.branch;
+
+  if (s.upstream && (mode !== 'status' || flag('--fetch'))) {
+    const f = fetchUpstream(dir, s.upstream);
+    if (!f.ok) row.notes.push(`fetch failed: ${f.err}`);
+    s = inspect(dir);
+  }
+
+  if (mode !== 'status' && s.behind > 0) {
+    if (s.dirtyTracked) {
+      row.notes.push(`behind ${s.behind}, uncommitted changes — pull skipped`);
+    } else if (s.ahead === 0) {
+      const m = git(dir, ['merge', '--ff-only', '--quiet', '@{u}']);
+      row.notes.push(m.ok ? `pulled ${s.behind}` : `pull failed: ${m.err}`);
+      if (!m.ok) failed = true;
+    } else if (mode === 'sync' && entry.push === 'auto') {
+      // Personal repos edited on two machines diverge routinely; replay the local commits on top.
+      const r = git(dir, ['rebase', '--quiet', '@{u}']);
+      if (!r.ok) git(dir, ['rebase', '--abort']);
+      row.notes.push(r.ok ? `rebased ${s.ahead} onto ${s.behind} new` : `diverged, rebase conflicted (aborted) — resolve by hand`);
+      if (!r.ok) failed = true;
+    } else {
+      row.notes.push(`diverged from ${s.upstream} — resolve by hand`);
+      if (mode === 'sync') failed = true;
+    }
+    s = inspect(dir);
+  }
+
+  if (mode === 'sync' && entry.push === 'auto' && (s.ahead > 0 || !s.upstream) && s.behind === 0 && !s.dirty) {
+    const p = git(dir, ['push', '--quiet', '-u', 'origin', 'HEAD'], 300000);
+    row.notes.push(p.ok ? 'pushed' : `push failed: ${p.err}`);
+    if (!p.ok) failed = true;
+    s = inspect(dir);
+  }
+
+  if (s.dirty && !row.notes.some((n) => n.includes('uncommitted'))) row.notes.push('uncommitted changes');
+  if (s.ahead > 0) row.notes.push(`${s.ahead} unpushed${entry.push === 'manual' ? ' (push by hand / PR)' : ''}`);
+  if (s.behind > 0 && mode === 'status') row.notes.push(`behind ${s.behind}`);
+  if (!s.upstream) row.notes.push('no upstream');
+  if (row.notes.length === 0) row.notes.push('up to date');
+}
+
+const width = (key) => Math.max(...rows.map((r) => r[key].length));
+const [nw, bw] = [width('name'), width('branch')];
+console.log(`Workspace (${CLOUD ? 'cloud session' : 'local'}) — repos under ${root}`);
+for (const r of rows) console.log(`  ${r.name.padEnd(nw)}  ${r.branch.padEnd(bw)}  ${r.notes.join('; ')}`);
+
+if (toAttach.length) {
+  console.log('\nCloud session: attach and clone these before starting work (see CLAUDE.md "Session start"):');
+  for (const e of toAttach) console.log(`  - ${e.repo}  →  ${e.dir}`);
+}
+
+process.exit(mode === 'hook' ? 0 : failed ? 1 : 0);

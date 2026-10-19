@@ -31,4 +31,10 @@ lists the repos that are missing, and CLAUDE.md has the agent attach and clone e
 - `bin/sync status`: see branch, dirty, and ahead/behind for every repo.
 - To add a repo, add it to `repos.json` and push.
 
+## Dev / staging login
+
+Set `WS_QA_EMAIL` and `WS_QA_PASSWORD`: in the cloud environment's variables for cloud sessions,
+or in your shell profile on a laptop. Then `bin/ws-login staging` (or `dev`) gives a headless
+session that the QA tooling reuses. Re-run it after 30 idle minutes.
+
 Rules for where files go and how each repo is pushed are in [CLAUDE.md](CLAUDE.md).

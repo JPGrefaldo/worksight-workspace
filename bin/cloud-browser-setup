@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Cloud sessions only: make headless Chromium trust the session's HTTPS proxy CA.
+# Chromium reads its own NSS store, not the system bundle, so without this every page
+# fails with ERR_CERT_AUTHORITY_INVALID. Safe to re-run; a no-op off the cloud.
+set -euo pipefail
+
+[ "${CLAUDE_CODE_REMOTE:-}" = "true" ] || exit 0
+CA=/root/.ccr/agent-proxy-ca.crt
+DB="sql:$HOME/.pki/nssdb"
+[ -f "$CA" ] || exit 0
+
+if ! command -v certutil >/dev/null 2>&1; then
+  (apt-get install -y -qq libnss3-tools || (apt-get update -qq && apt-get install -y -qq libnss3-tools)) >/dev/null 2>&1 \
+    || { echo "browser setup: could not install certutil (libnss3-tools)"; exit 0; }
+fi
+
+mkdir -p "$HOME/.pki/nssdb"
+[ -f "$HOME/.pki/nssdb/cert9.db" ] || certutil -d "$DB" -N --empty-password
+if ! certutil -d "$DB" -L -n ccr-agent-proxy >/dev/null 2>&1; then
+  certutil -d "$DB" -A -t "C,," -n ccr-agent-proxy -i "$CA"
+fi
+echo "browser setup: Chromium trusts the session proxy CA"

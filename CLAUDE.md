@@ -56,6 +56,22 @@ of the ticket, move it to `notes/`. A `worksight` PR should show only the ticket
   Work on a branch and open a PR, following that repo's own CLAUDE.md.
 - Never use `git add -A` in `worksight`.
 
+## Logging in to dev / staging
+
+`bin/ws-login staging|dev [--screenshot <file.png>]` logs in headless with `WS_QA_EMAIL` /
+`WS_QA_PASSWORD`, or `WS_STAGING_*` / `WS_DEV_*` to override one env. It saves the session to
+`~/.cache/worksight-qa/<host>.json`, where `qa/check-auth.mjs` and `qa/drive.mjs` look for it.
+
+- The app logs out after 30 idle minutes (`DEVISE_TIMEOUT`). When `check-auth` reports
+  `AUTH EXPIRED`, re-run `bin/ws-login` instead of the headed login.
+- It refuses any host other than dev, staging or a local app. Never point stored credentials at
+  production.
+- Never print, echo, log or commit the credential variables or the saved session file.
+  Screenshots of logged-in pages may show client data. Keep them in the scratchpad or `tmp/`,
+  never in a repo.
+- In a cloud session, the SessionStart hook runs `bin/cloud-browser-setup` so Chromium trusts the
+  session proxy. Without it, every page fails with `ERR_CERT_AUTHORITY_INVALID`.
+
 ## Adding a repo
 
 Add an entry to `repos.json` (`repo`, `push`, `attach`, `purpose`) and push. Every later session

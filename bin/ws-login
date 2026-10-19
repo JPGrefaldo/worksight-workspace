@@ -1,0 +1,124 @@
+#!/usr/bin/env node
+// Headless login to a deployed WorkSight env. Saves the session where the team's QA
+// tooling looks for it (~/.cache/worksight-qa/<host>.json), so check-auth.mjs and
+// drive.mjs work afterwards without a headed login.
+//
+//   bin/ws-login staging|dev|<baseURL> [--screenshot <file.png>] [--state <file.json>]
+//
+// Credentials come from the environment, never from arguments:
+//   WS_<ENV>_EMAIL / WS_<ENV>_PASSWORD  (ENV = STAGING or DEV), falling back to
+//   WS_QA_EMAIL / WS_QA_PASSWORD.
+// Only for dev and staging (email + password, no 2FA). Refuses any other gnapartners host.
+'use strict';
+
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { createRequire } = require('module');
+const { execSync } = require('child_process');
+
+const ENVS = {
+  staging: 'https://worksight-staging.gnapartners.com',
+  dev: 'https://worksight-development.gnapartners.com',
+};
+
+const usage = 'usage: bin/ws-login staging|dev|<baseURL> [--screenshot <file.png>] [--state <file.json>]';
+const argv = process.argv.slice(2);
+const opt = (name) => {
+  const i = argv.indexOf(name);
+  if (i === -1) return null;
+  const v = argv[i + 1];
+  if (!v || v.startsWith('--')) fail(`${name} needs a value\n${usage}`, 2);
+  argv.splice(i, 2);
+  return v;
+};
+
+function fail(msg, code = 1) {
+  console.error(msg);
+  process.exit(code);
+}
+
+const screenshot = opt('--screenshot');
+const stateOverride = opt('--state');
+const target = argv[0];
+if (!target) fail(usage, 2);
+
+const baseURL = ENVS[target] || target;
+let host;
+try {
+  ({ host } = new URL(baseURL));
+} catch {
+  fail(`unknown env or invalid URL: ${target}\n${usage}`, 2);
+}
+const envKey = Object.keys(ENVS).find((k) => new URL(ENVS[k]).host === host);
+if (!envKey && !/^(localhost|127\.0\.0\.1|[a-z0-9-]+\.lvh\.me)(:\d+)?$/.test(host)) {
+  fail(`refusing ${host}: only dev, staging or a local app (stored credentials must never reach production)`, 2);
+}
+
+const prefix = envKey ? `WS_${envKey.toUpperCase()}_` : 'WS_QA_';
+const email = process.env[`${prefix}EMAIL`] || process.env.WS_QA_EMAIL;
+const password = process.env[`${prefix}PASSWORD`] || process.env.WS_QA_PASSWORD;
+if (!email || !password) {
+  fail(`missing credentials: set ${prefix}EMAIL/${prefix}PASSWORD or WS_QA_EMAIL/WS_QA_PASSWORD in the environment`, 2);
+}
+
+// Playwright: this dir, the monolith's install, then a global install.
+function loadChromium() {
+  const roots = [
+    __dirname,
+    path.resolve(__dirname, '../../worksight/apps/worksight'),
+  ];
+  try {
+    roots.push(execSync('npm root -g', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim());
+  } catch {}
+  for (const root of roots) {
+    for (const pkg of ['playwright', 'playwright-core']) {
+      try {
+        return createRequire(path.join(root, 'noop.js'))(pkg).chromium;
+      } catch {}
+    }
+  }
+  fail('playwright not found: run yarn in worksight/apps/worksight, or npm i -g playwright', 1);
+}
+
+const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+const stateFile = stateOverride || path.join(os.homedir(), '.cache', 'worksight-qa', `${slug(host)}.json`);
+
+(async () => {
+  const chromium = loadChromium();
+  const proxy = process.env.HTTPS_PROXY ? { server: process.env.HTTPS_PROXY, bypass: process.env.NO_PROXY } : undefined;
+  const browser = await chromium.launch({ proxy });
+  try {
+    const context = await browser.newContext({ viewport: { width: 1366, height: 860 } });
+    const page = await context.newPage();
+    await page.goto(baseURL, { waitUntil: 'networkidle', timeout: 60000 });
+
+    const reject = page.locator('#onetrust-reject-all-handler');
+    if (await reject.isVisible().catch(() => false)) await reject.click();
+
+    await page.locator('input[type=email]:visible').fill(email);
+    await page.getByRole('button', { name: /^next$/i }).click();
+    const pw = page.locator('input[type=password]:visible');
+    await pw.waitFor({ state: 'visible', timeout: 30000 });
+    await pw.fill(password);
+    await page.getByRole('button', { name: /^log in$/i }).click();
+
+    // Login renders client-side at the same URL, so success means the password form is gone.
+    await pw.waitFor({ state: 'hidden', timeout: 45000 }).catch(() => {});
+    await page.waitForLoadState('networkidle').catch(() => {});
+    const loggedIn = !(await page.locator('input[type=password]:visible, input[type=email]:visible').count().then((n) => n > 0).catch(() => false));
+
+    if (screenshot) await page.screenshot({ path: screenshot });
+    if (!loggedIn) {
+      const alert = (await page.locator('[role=alert], .MuiAlert-message, .error').first().innerText().catch(() => '')).trim();
+      fail(`LOGIN FAILED on ${host}${alert ? ` — page says: ${alert.slice(0, 160)}` : ''}${screenshot ? ` (see ${screenshot})` : ''}`);
+    }
+
+    fs.mkdirSync(path.dirname(stateFile), { recursive: true, mode: 0o700 });
+    await context.storageState({ path: stateFile });
+    fs.chmodSync(stateFile, 0o600);
+    console.log(`LOGGED IN to ${host} — landed on ${new URL(page.url()).pathname}; session saved to ${stateFile}`);
+  } finally {
+    await browser.close();
+  }
+})().catch((e) => fail(`ws-login error: ${String(e.message || e).split('\n')[0]}`));

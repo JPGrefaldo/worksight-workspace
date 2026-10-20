@@ -5,6 +5,10 @@
 //   bin/sync status     local state only (add --fetch to refresh remote refs first)
 //   bin/sync --hook     SessionStart mode: pull only, never commits or pushes, always exits 0
 //
+// push:auto repos (this workspace, planning-docs) live on their default branch only. A cloud session
+// starts every clone on its own claude/<name> branch; sync moves such a clone back to main, carrying
+// its commits along, so nothing is ever pushed to a side branch there.
+//
 // Flags: --no-clone (sync without cloning), --all (also clone attach:on-demand repos)
 'use strict';
 
@@ -76,6 +80,54 @@ function fetchUpstream(dir, upstream) {
   return git(dir, ['fetch', '--quiet', remote, branch]);
 }
 
+function defaultBranch(dir) {
+  const ref = git(dir, ['symbolic-ref', '--quiet', '--short', 'refs/remotes/origin/HEAD']).out;
+  return ref.startsWith('origin/') ? ref.slice('origin/'.length) : 'main';
+}
+
+// Put a push:auto clone back on its default branch. Returns true when the clone is on main afterwards.
+// Hook mode only switches (no rebase); sync mode also replays side-branch commits onto origin/main.
+function moveToMain(dir, row) {
+  const main = defaultBranch(dir);
+  const cur = git(dir, ['rev-parse', '--abbrev-ref', 'HEAD']).out;
+  if (cur === main) return true;
+  const f = git(dir, ['fetch', '--quiet', 'origin', main]);
+  if (!f.ok) {
+    row.notes.push(`on ${cur}; fetch of ${main} failed: ${f.err}`);
+    return false;
+  }
+  if (git(dir, ['status', '--porcelain', '--untracked-files=no']).out !== '') {
+    row.notes.push(`on ${cur} with uncommitted changes — commit, then run bin/sync to move to ${main}`);
+    return false;
+  }
+  const ahead = Number(git(dir, ['rev-list', '--count', `origin/${main}..HEAD`]).out) || 0;
+  if (ahead > 0) {
+    if (mode === 'hook') {
+      row.notes.push(`on ${cur} with ${ahead} commits not on ${main} — run bin/sync to move them`);
+      return false;
+    }
+    const r = git(dir, ['rebase', '--quiet', `origin/${main}`]);
+    if (!r.ok) {
+      git(dir, ['rebase', '--abort']);
+      row.notes.push(`${ahead} commits on ${cur} conflict with ${main} — resolve by hand`);
+      return false;
+    }
+  }
+  const hasMain = git(dir, ['show-ref', '--verify', '--quiet', `refs/heads/${main}`]).ok;
+  if (hasMain && (Number(git(dir, ['rev-list', '--count', `origin/${main}..${main}`]).out) || 0) > 0) {
+    row.notes.push(`local ${main} has unpushed commits of its own — resolve by hand`);
+    return false;
+  }
+  const c = git(dir, ['checkout', '--quiet', '-B', main, ahead > 0 ? 'HEAD' : `origin/${main}`]);
+  if (!c.ok) {
+    row.notes.push(`could not switch to ${main}: ${c.err}`);
+    return false;
+  }
+  git(dir, ['branch', '--quiet', `--set-upstream-to=origin/${main}`, main]);
+  row.notes.push(`moved from ${cur} to ${main}${ahead > 0 ? ` with ${ahead} commits` : ''}`);
+  return true;
+}
+
 function cloneUrl(repo) {
   return local.protocol === 'ssh' ? `git@github.com:${repo}.git` : `https://github.com/${repo}.git`;
 }
@@ -125,6 +177,10 @@ for (const entry of entries) {
     if (!r.ok) failed = true;
   }
 
+  // push:auto repos are main-only: leave a cloud session's claude/<name> branch before anything else.
+  const onMain = entry.push !== 'auto' || mode === 'status' || moveToMain(dir, row);
+  if (!onMain && mode === 'sync') failed = true;
+
   let s = inspect(dir);
   row.branch = s.branch;
 
@@ -154,7 +210,7 @@ for (const entry of entries) {
     s = inspect(dir);
   }
 
-  if (mode === 'sync' && entry.push === 'auto' && (s.ahead > 0 || !s.upstream) && s.behind === 0 && !s.dirty) {
+  if (mode === 'sync' && entry.push === 'auto' && onMain && (s.ahead > 0 || !s.upstream) && s.behind === 0 && !s.dirty) {
     const p = git(dir, ['push', '--quiet', '-u', 'origin', 'HEAD'], 300000);
     row.notes.push(p.ok ? 'pushed' : `push failed: ${p.err}`);
     if (!p.ok) failed = true;

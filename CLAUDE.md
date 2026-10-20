@@ -26,8 +26,15 @@ every `attach: always` repo that is missing. For each one, before doing the task
 3. Call `register_repo_root` with that path, so the repo's own CLAUDE.md, skills and rules load.
 
 Attach `attach: on-demand` repos only when the task needs them. Once the repos are cloned, run
-`bin/sync status` to confirm. A cloud session gives you a working branch for each repo. Use it in
-any repo you change.
+`bin/sync status` to confirm.
+
+A cloud session gives you a `claude/<name>` working branch in each clone. **Do not work on it in a
+`push: auto` repo** (this one, planning-docs): those repos are `main` only, and `bin/sync --hook`
+has already switched them back to `main` at session start. If `bin/sync status` shows one of them
+on any other branch, run `bin/sync` to move the commits to `main` before doing anything else.
+GitHub cannot enforce this on a private free-plan repo, so `bin/sync` is the only guard: never
+`git push` a `claude/*` branch of a `push: auto` repo by hand. In a `push: manual` repo, follow that repo's own branch rule
+(the worksight monolith: a ticket branch from `development`, named per its PR template).
 
 **Laptop** (`CLAUDE_CODE_REMOTE` unset): the repos are already cloned next to this one, or at the
 paths in `workspace.local.json`. Never re-clone them. If one shows as missing, run `bin/sync`, which
@@ -50,8 +57,9 @@ of the ticket, move it to `notes/`. A `worksight` PR should show only the ticket
 ## Committing and pushing
 
 - Commit in the repo the file belongs to. `cd` into it. Never stage another repo's files from here.
-- `push: auto` repos (this one, planning-docs): `bin/sync` commits and pushes them on a laptop. In a
-  cloud session, commit with a real message and then run `bin/sync`, which pushes the current branch.
+- `push: auto` repos (this one, planning-docs): always on `main`. `bin/sync` commits and pushes them
+  on a laptop. In a cloud session, commit with a real message and then run `bin/sync`, which moves
+  the clone to `main` if needed and pushes `main`. Never `git checkout -b` in these repos.
 - `push: manual` repos (worksight, gna-brain, gna-worklog, gna-atlas): `bin/sync` only pulls them.
   Work on a branch and open a PR, following that repo's own CLAUDE.md.
 - Never use `git add -A` in `worksight`.

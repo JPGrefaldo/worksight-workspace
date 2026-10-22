@@ -80,6 +80,20 @@ of the ticket, move it to `notes/`. A `worksight` PR should show only the ticket
 - In a cloud session, the SessionStart hook runs `bin/cloud-browser-setup` so Chromium trusts the
   session proxy. Without it, every page fails with `ERR_CERT_AUTHORITY_INVALID`.
 
+## Uploading evidence to a PR
+
+GitHub has no API for PR images and videos. `bin/gh-attach <owner/repo#N> <file>...` uploads them
+through the PR's own comment box in a headless browser and prints JSON with each file's
+`user-attachments` URL and the snippet GitHub inserted. Nothing is posted; put the URLs in the PR body.
+
+- Laptop only. A cloud session's proxy limits github.com to repo-scoped paths, so `/login`, `/session`,
+  `/upload/policies/assets` and `user-attachments` all return 403 there. The script refuses when
+  `CLAUDE_CODE_REMOTE=true`.
+- Sign in once with `bin/gh-attach --login` (headed, 2FA works). The session stays in the browser
+  profile at `~/.cache/worksight-qa/github-profile`. Never copy it into a repo or print its cookies.
+- Images up to 10 MB (png, jpg, gif, svg), videos up to 100 MB (mp4, mov, webm). `--headed` and
+  `--screenshot <file.png>` help when GitHub changes the page.
+
 ## Adding a repo
 
 Add an entry to `repos.json` (`repo`, `push`, `attach`, `purpose`) and push. Every later session

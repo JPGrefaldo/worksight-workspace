@@ -1,0 +1,214 @@
+#!/usr/bin/env node
+// Uploads images and videos to GitHub the way a drag-and-drop does, and prints the
+// user-attachments URLs, so evidence can go into a PR body without a person dragging files.
+//
+//   bin/gh-attach --login                                   sign in once, headed (2FA works)
+//   bin/gh-attach <owner/repo#N | PR URL> <file>... [--headed] [--screenshot <file.png>]
+//
+// GitHub has no API for these uploads. This drives the PR's own comment box: it attaches each
+// file, waits for GitHub to swap the "Uploading…" placeholder for the asset URL, then empties the
+// box. Nothing is posted; the URLs stay valid and can go into the PR body or a comment.
+//
+// Prints JSON to stdout: [{ "file", "url", "markdown" }], one entry per file, in argument order.
+// "markdown" is what GitHub inserted (an <img> tag for images, the bare URL for videos).
+//
+// The GitHub session lives in a browser profile at ~/.cache/worksight-qa/github-profile. Never
+// copy it into a repo or print its cookies. Laptop only: a cloud session's proxy limits
+// github.com to repo-scoped paths, so sign-in and the upload endpoint are refused there.
+'use strict';
+
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { createRequire } = require('module');
+const { execSync } = require('child_process');
+
+const usage =
+  'usage: bin/gh-attach --login\n' +
+  '       bin/gh-attach <owner/repo#N | PR URL> <file>... [--headed] [--screenshot <file.png>]';
+const PROFILE = path.join(os.homedir(), '.cache', 'worksight-qa', 'github-profile');
+const ASSET_URL = /https:\/\/github\.com\/user-attachments\/assets\/[0-9a-f-]{36}/gi;
+const TYPES = { '.png': 10, '.jpg': 10, '.jpeg': 10, '.gif': 10, '.svg': 10, '.mp4': 100, '.mov': 100, '.webm': 100 };
+
+function fail(msg, code = 1) {
+  console.error(msg);
+  process.exit(code);
+}
+
+// Playwright: this dir, the monolith's install, then a global install.
+function loadChromium() {
+  const roots = [__dirname, path.resolve(__dirname, '../../worksight/apps/worksight')];
+  try {
+    roots.push(execSync('npm root -g', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim());
+  } catch {}
+  for (const root of roots) {
+    for (const pkg of ['playwright', 'playwright-core']) {
+      try {
+        return createRequire(path.join(root, 'noop.js'))(pkg).chromium;
+      } catch {}
+    }
+  }
+  fail('playwright not found: run yarn in worksight/apps/worksight, or npm i -g playwright', 1);
+}
+
+function parsePr(arg) {
+  const m =
+    /^([\w.-]+)\/([\w.-]+)#(\d+)$/.exec(arg) ||
+    /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/pull\/(\d+)/.exec(arg);
+  return m && { owner: m[1], repo: m[2], number: Number(m[3]) };
+}
+
+// The new-comment box at the bottom of the PR: the classic form, then the React editor.
+const COMPOSER = ['#new_comment_field', 'textarea[name="comment[body]"]', 'textarea[aria-label="Markdown value"]'];
+
+async function findComposer(page) {
+  for (const selector of COMPOSER) {
+    const box = page.locator(selector).last();
+    if (await box.isVisible().catch(() => false)) return box;
+  }
+  return null;
+}
+
+// Attaches one file through the box's own file input, or by a drop on the box when there is none,
+// and resolves with the new asset URL and the text GitHub inserted for it.
+async function attachOne(page, box, file, timeoutMs) {
+  const before = new Set((await box.inputValue()).match(ASSET_URL) || []);
+  const input = await box.evaluateHandle((el) => {
+    const scope = el.closest('file-attachment, form, [class*="MarkdownEditor"], [data-testid*="markdown"]');
+    return (scope && scope.querySelector('input[type=file]')) || null;
+  });
+  const fileInput = input.asElement();
+  if (fileInput) {
+    await fileInput.setInputFiles(file);
+  } else {
+    const data = fs.readFileSync(file).toString('base64');
+    const type = { '.png': 'image/png', '.gif': 'image/gif', '.mp4': 'video/mp4', '.mov': 'video/quicktime', '.webm': 'video/webm' }[path.extname(file).toLowerCase()] || 'image/jpeg';
+    await box.evaluate(
+      (el, { name, type, data }) => {
+        const bytes = Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
+        const dt = new DataTransfer();
+        dt.items.add(new File([bytes], name, { type }));
+        for (const kind of ['dragenter', 'dragover', 'drop']) {
+          el.dispatchEvent(new DragEvent(kind, { bubbles: true, cancelable: true, dataTransfer: dt }));
+        }
+      },
+      { name: path.basename(file), type, data }
+    );
+  }
+
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const text = await box.inputValue();
+    const url = (text.match(ASSET_URL) || []).find((u) => !before.has(u));
+    if (url && !/Uploading /.test(text)) {
+      const esc = url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const snippet = text.match(new RegExp(`<img[^>]*${esc}[^>]*>|!\\[[^\\]]*\\]\\(${esc}\\)`));
+      return { url, markdown: snippet ? snippet[0] : url };
+    }
+    await page.waitForTimeout(500);
+  }
+  throw new Error(`timed out uploading ${path.basename(file)} (GitHub never inserted its URL; re-run with --headed to watch)`);
+}
+
+// Uploads every file in order through the composer, then puts back whatever the box held before.
+// Never submits.
+async function uploadThroughComposer(page, files) {
+  const box = await findComposer(page);
+  if (!box) throw new Error('no comment box on the page (signed out, no access to the repo, or the PR is locked)');
+  const original = await box.inputValue();
+  const results = [];
+  try {
+    for (const file of files) {
+      const mb = fs.statSync(file).size / 1e6;
+      const timeoutMs = Math.min(600000, 60000 + mb * 15000);
+      results.push({ file, ...(await attachOne(page, box, file, timeoutMs)) });
+    }
+  } finally {
+    await box.fill(original).catch(() => {});
+  }
+  return results;
+}
+
+async function signedInAs(page) {
+  return (await page.locator('meta[name="user-login"]').getAttribute('content').catch(() => '')) || '';
+}
+
+async function main() {
+  const argv = process.argv.slice(2);
+  const take = (name) => {
+    const i = argv.indexOf(name);
+    if (i === -1) return null;
+    const v = argv[i + 1];
+    if (!v || v.startsWith('--')) fail(`${name} needs a value\n${usage}`, 2);
+    argv.splice(i, 2);
+    return v;
+  };
+  const flag = (name) => {
+    const i = argv.indexOf(name);
+    if (i !== -1) argv.splice(i, 1);
+    return i !== -1;
+  };
+  const screenshot = take('--screenshot');
+  const login = flag('--login');
+  const headed = flag('--headed') || login;
+
+  if (process.env.CLAUDE_CODE_REMOTE === 'true') {
+    fail('gh-attach runs on a laptop only: the cloud session proxy refuses github.com sign-in and uploads', 2);
+  }
+
+  let pr;
+  let files = [];
+  if (!login) {
+    pr = parsePr(argv[0] || '');
+    files = argv.slice(1);
+    if (!pr || files.length === 0) fail(usage, 2);
+    for (const file of files) {
+      if (!fs.existsSync(file)) fail(`no such file: ${file}`, 2);
+      const limit = TYPES[path.extname(file).toLowerCase()];
+      if (!limit) fail(`GitHub does not take ${path.extname(file) || 'extensionless'} files: ${file}`, 2);
+      if (fs.statSync(file).size > limit * 1e6) fail(`${file} is over GitHub's ${limit} MB limit`, 2);
+    }
+  }
+
+  fs.mkdirSync(PROFILE, { recursive: true, mode: 0o700 });
+  const chromium = loadChromium();
+  const context = await chromium.launchPersistentContext(PROFILE, {
+    headless: !headed,
+    viewport: { width: 1366, height: 900 },
+  });
+  const page = context.pages()[0] || (await context.newPage());
+  try {
+    if (login) {
+      await page.goto('https://github.com/login', { waitUntil: 'domcontentloaded' });
+      console.error('Sign in to GitHub in the window (2FA included). Waiting up to 5 minutes...');
+      const deadline = Date.now() + 300000;
+      let user = '';
+      while (!user && Date.now() < deadline) {
+        await page.waitForTimeout(2000);
+        if (new URL(page.url()).pathname === '/') user = await signedInAs(page);
+        else if (!/\/(login|session|sessions)/.test(new URL(page.url()).pathname)) {
+          await page.goto('https://github.com/', { waitUntil: 'domcontentloaded' });
+        }
+      }
+      if (!user) fail('not signed in after 5 minutes');
+      console.log(`SIGNED IN as ${user}; session kept in ${PROFILE}`);
+      return;
+    }
+
+    const url = `https://github.com/${pr.owner}/${pr.repo}/pull/${pr.number}`;
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    if (!(await signedInAs(page))) fail('not signed in to GitHub: run bin/gh-attach --login first', 1);
+    await page.waitForLoadState('networkidle', { timeout: 30000 }).catch(() => {});
+
+    const results = await uploadThroughComposer(page, files);
+    console.log(JSON.stringify(results, null, 2));
+  } catch (e) {
+    if (screenshot) await page.screenshot({ path: screenshot, fullPage: false }).catch(() => {});
+    fail(`gh-attach error: ${String(e.message || e).split('\n')[0]}${screenshot ? ` (see ${screenshot})` : ''}`);
+  } finally {
+    await context.close();
+  }
+}
+
+module.exports = { uploadThroughComposer, parsePr };
+if (require.main === module) main();

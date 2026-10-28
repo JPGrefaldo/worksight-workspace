@@ -224,10 +224,26 @@ for (const entry of entries) {
   if (row.notes.length === 0) row.notes.push('up to date');
 }
 
+// Cloud session: install planning-docs' claude-rules mirror (rules, agents, commands, skills, hooks,
+// CLAUDE.md) into ~/.claude as soon as that clone exists. Every mode runs it, so the bin/sync status
+// after attaching the repos installs it too. On a laptop the live files are the source and this is skipped.
+let rulesLine = '';
+if (CLOUD) {
+  const pd = entries.find((e) => e.name === 'worksight-planning-docs');
+  const script = pd && path.join(dirFor(pd), 'claude-rules', 'install.sh');
+  if (script && fs.existsSync(script)) {
+    const r = spawnSync('bash', [script], { encoding: 'utf8', timeout: 60000 });
+    rulesLine = ((r.stdout || '').trim() || `install failed: ${(r.stderr || r.error || '').toString().trim()}`).split('\n').pop();
+  } else {
+    rulesLine = 'claude-rules: not installed yet — attach worksight-planning-docs, then run bin/sync status';
+  }
+}
+
 const width = (key) => Math.max(...rows.map((r) => r[key].length));
 const [nw, bw] = [width('name'), width('branch')];
 console.log(`Workspace (${CLOUD ? 'cloud session' : 'local'}) — repos under ${root}`);
 for (const r of rows) console.log(`  ${r.name.padEnd(nw)}  ${r.branch.padEnd(bw)}  ${r.notes.join('; ')}`);
+if (rulesLine) console.log(`\n${rulesLine}`);
 
 if (toAttach.length) {
   console.log('\nCloud session: attach and clone these before starting work (see CLAUDE.md "Session start"):');

@@ -28,6 +28,13 @@ every `attach: always` repo that is missing. For each one, before doing the task
 Attach `attach: on-demand` repos only when the task needs them. Once the repos are cloned, run
 `bin/sync status` to confirm.
 
+In a cloud session every `bin/sync` run (the hook, `status`, plain `sync`) also installs planning-docs'
+`claude-rules/` (rules, agents, commands, skills, hooks, `CLAUDE.md`) into `~/.claude` once that clone
+exists, via `claude-rules/install.sh`; the last line of its output says what it installed. Files
+installed mid-session may only take effect from the next session start: until then, read the rule or
+skill from `worksight-planning-docs/claude-rules/` directly when the task needs it. Settings, hooks
+and permissions are not installed this way.
+
 A cloud session gives you a `claude/<name>` working branch in each clone. **Do not work on it in a
 `push: auto` repo** (this one, planning-docs): those repos are `main` only, and `bin/sync --hook`
 has already switched them back to `main` at session start. If `bin/sync status` shows one of them

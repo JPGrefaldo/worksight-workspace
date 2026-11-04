@@ -74,8 +74,8 @@ as read-only or as a change.
 ## The file
 
 `<PD>/<ticket folder>/runbook-<slug>.md`, else `<PD>/runbooks/<WOR-id>-<slug>.md`. A runbook goes
-into `<WS>/apps/worksight/docs/runbooks/` only as part of the ticket's own change (an Anvil card or a
-PR JP approves). You never write it there yourself.
+into `<WS>/apps/worksight/docs/runbooks/` only as part of the ticket's own change (the PR JP approves,
+whoever builds it). You never write it there yourself.
 
 ## Hard rules
 

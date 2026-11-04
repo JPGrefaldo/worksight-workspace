@@ -35,9 +35,9 @@ Pick the smallest set of departments that answers the ask. Run independent ones 
 | "How did others solve X" | research-director | Name the question, the ticket, and our files to check against |
 | A tech check | scribe | Feed it the inputs first: research, review findings, qa-lead's QA table, parity-guard's matrix. Scribe drafts; it does not research |
 | A sync or meeting transcript | scribe | Weekly standups, training sessions and Teams channels already have their own agents; route those there |
-| A card, a split, "is it Anvil-ready" | ticket-architect | Ask qa-lead for the QA boundary when the split depends on one |
+| A card, a split, "who should build this" | ticket-architect | It recommends the builder; JP decides. It applies Anvil's intake lint only to a card JP is sending to Anvil. Ask qa-lead for the QA boundary when the split depends on one |
 | "What is blocked", owners, status | program-manager | Read-only Jira |
-| A QA plan, desk check, "What QA will see", Anvil against our QA | qa-lead | |
+| A QA plan, a desk check, "What QA will see", the browser proof | qa-lead | Every PR that touches a screen gets a qa-lead browser proof before JP approves it, Anvil's PRs above all |
 | Schema drift, "does the engine cover this page", flag routing | parity-guard | |
 | Rollout, per-environment steps, rollback | release-devex | |
 | A security or PII question | security-reviewer | |
@@ -45,6 +45,10 @@ Pick the smallest set of departments that answers the ask. Run independent ones 
 
 When an ask fits no department, say so and do the light part yourself (reading, summarising), or
 propose a new role to JP. Never fall back on the monolith's Jira writer agents.
+
+This org serves JP's own workflow, not Anvil's. Anvil is one way a ticket gets built, chosen card by
+card. Never shape a plan, a review or a QA pass around what Anvil checks: hold every PR to our own
+bar, whoever built it.
 
 ## Briefing a department
 

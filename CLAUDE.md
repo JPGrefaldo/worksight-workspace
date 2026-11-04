@@ -128,6 +128,14 @@ subagents defined in `.claude/agents/<role>.md`. They load at session start in e
 that starts from this repo: every cloud session, and a laptop session started in this folder.
 Departments draft. They never post, commit, push or deploy.
 
+**This is JP's personal orchestration.** Its reference is JP's own way of working: the planning
+docs, the tech-check gate, desk checks, review rounds and the decision log. Anvil is not the
+model. It is one route, for ticket-driven work, chosen card by card. It is weak on frontend: its
+loop never opens a browser, and design-system, layout, accessibility and Classic/Modern problems
+get through it. So frontend work, and the browser proof for any change, stays with JP's own
+process. Only ticket-architect applies Anvil's intake rules, and only to a card that JP is
+sending to Anvil.
+
 **Starting a chief of staff.** In any session, type `/cos`, optionally followed by the ask. The main
 session reads `.claude/agents/chief-of-staff.md` and acts as that agent. On a laptop,
 `claude --agent chief-of-staff` from this folder does the same and also enforces the agent's tool
@@ -146,8 +154,8 @@ folder" is the planning folder that already exists for that ticket (`HRIS-ESS-MI
 | pr-reviewer | Meticulous, read-only review. Gets precedent from research-director. Rates severity, marks visible or latent | `pr-reviews/` | opus |
 | security-reviewer | HRIS checklist: PII in Kafka messages, encryption, keyed hashes, XSS, authorization, test data | `pr-reviews/` (`-security` suffix) | opus |
 | parity-guard | Schema parity between the monolith and the engine (type, nullability, arguments, enums), and the flag routing matrix | `qa/` | opus |
-| qa-lead | "What QA will see", flag-off and flag-on desk checks, the QA boundary, Anvil against our QA process | `qa/` | opus |
-| ticket-architect | Splits cards into Anvil-ready slices and lints them before anyone adds the label | the ticket folder, else `cards/` | opus |
+| qa-lead | "What QA will see", flag-off and flag-on desk checks, the QA boundary, the browser proof | `qa/` | opus |
+| ticket-architect | Shapes and splits cards, recommends who builds each one, and runs Anvil's intake lint only on cards going to Anvil | the ticket folder, else `cards/` | opus |
 | program-manager | Read-only Jira: stale blockers, missing owners, dependencies written as prose | `status/` | sonnet |
 | release-devex | Per-environment steps, rollout order, rollback runbooks | the ticket folder, else `runbooks/` | sonnet |
 | scribe | Sync transcripts into timestamped decisions, tech-check drafts in the Q format | `meeting-briefs/`, the ticket folder | sonnet |
@@ -224,5 +232,4 @@ Sessions and subagents share no memory, so files are the only hand-off.
 
   Each finding also says **visible today**, **visible when `<flag>` is on**, or **latent**. Its
   evidence is **[v]** (re-read by the author and holds), **[a]** (from a helper agent only) or **[i]**
-  (inference, not run). A finding would block Anvil only if it is correctness, security, data loss or
-  missing tests *and* comes with a reproduction that ran.
+  (inference, not run). A P0 or P1 blocks the merge, whoever built the PR.

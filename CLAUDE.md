@@ -119,3 +119,110 @@ Pulls are fast-forward only. A repo with uncommitted tracked changes is skipped,
 `push: auto` repo that diverged is rebased, and a conflict aborts the rebase and is reported. A
 `push: manual` repo that diverged is only reported. A repo whose `origin` does not match
 `repos.json` is skipped.
+
+## The org: JP's agent company
+
+JP is the CEO and the only one who posts to Jira, GitHub or Teams. A **chief-of-staff** session takes
+JP's asks, routes each one to a department below, and keeps the decision log. Departments are
+subagents defined in `.claude/agents/<role>.md`. They load at session start in every session
+that starts from this repo: every cloud session, and a laptop session started in this folder.
+Departments draft. They never post, commit, push or deploy.
+
+**Starting a chief of staff.** In any session, type `/cos`, optionally followed by the ask. The main
+session reads `.claude/agents/chief-of-staff.md` and acts as that agent. On a laptop,
+`claude --agent chief-of-staff` from this folder does the same and also enforces the agent's tool
+list. Any session may still call one department directly ("use the pr-reviewer agent on
+GAPartners/worksight#14550"). The contract below applies either way.
+
+`<PD>` is the planning-docs clone: `/home/user/worksight-planning-docs` in a cloud session, or the
+path `bin/sync status` reports on a laptop. Every output path below is inside `<PD>`. "The ticket
+folder" is the planning folder that already exists for that ticket (`HRIS-ESS-MIGRATION/wor-19721/`,
+`WOR-16945/`). Create a top-level `WOR-XXXXX/` only when none exists.
+
+| Role | Job | Writes to | Model |
+|---|---|---|---|
+| chief-of-staff | Routes work, keeps the decision log, commits planning-docs. Never writes code | `decisions/` | inherit |
+| research-director | Finds how others solved the same problem, then checks each finding against our code at file:line | `<project>/research/`, else `research/` | opus |
+| pr-reviewer | Meticulous, read-only review. Gets precedent from research-director. Rates severity, marks visible or latent | `pr-reviews/` | opus |
+| security-reviewer | HRIS checklist: PII in Kafka messages, encryption, keyed hashes, XSS, authorization, test data | `pr-reviews/` (`-security` suffix) | opus |
+| parity-guard | Schema parity between the monolith and the engine (type, nullability, arguments, enums), and the flag routing matrix | `qa/` | opus |
+| qa-lead | "What QA will see", flag-off and flag-on desk checks, the QA boundary, Anvil against our QA process | `qa/` | opus |
+| ticket-architect | Splits cards into Anvil-ready slices and lints them before anyone adds the label | the ticket folder, else `cards/` | opus |
+| program-manager | Read-only Jira: stale blockers, missing owners, dependencies written as prose | `status/` | sonnet |
+| release-devex | Per-environment steps, rollout order, rollback runbooks | the ticket folder, else `runbooks/` | sonnet |
+| scribe | Sync transcripts into timestamped decisions, tech-check drafts in the Q format | `meeting-briefs/`, the ticket folder | sonnet |
+
+**Contractors** that departments may call: planning-docs' brief agents (`weekly-scrum-brief`,
+`training-session-brief`, `teams-channel-brief`, `patterns-harvester`) and the monolith's read-side
+agents (`code-review-plus` in local-notes mode, `regression-guard`, `qa-runner`, `jira-fetcher`,
+`deployment-tracker`, `Explore`). The monolith's Jira writers (`jira-creator`, `jira-updater`,
+`jira-commenter`, `jira-epic-*`, `jira-feature-updater`) are off limits to every department.
+
+### Hand-off contract
+
+Sessions and subagents share no memory, so files are the only hand-off.
+
+1. **Brief.** The chief of staff gives a department, in its spawn prompt, the ask, the ticket or
+   PR, the output path, the files to read first, and what is already ruled out.
+2. **One file.** The department writes one file at that path. It starts with this header and ends
+   with a `## Hand-off` section:
+
+   ```
+   ---
+   role: pr-reviewer
+   ask: Review GAPartners/worksight#14550, round 3
+   ticket: WOR-19721            # or none
+   pr: GAPartners/worksight#14550   # or none
+   date: 2026-11-04
+   code_checked: GAPartners/worksight jpgrefaldo/WOR-19721-v2 @ b45d9a36e6   # or none
+   status: done                 # done | partial | blocked
+   ---
+   ```
+
+   `## Hand-off` has four items: **Answer** (three lines at most); **For JP to decide** (numbered,
+   each with a recommendation and the alternative, or "none"); **Next** (which department should
+   pick this up, with what ask, or "none"); **Not done** (what was skipped, and why).
+3. **Short reply.** The department replies with the file's path and its Answer lines, nothing
+   else. The chief of staff reads the file, not the reply.
+4. **Log.** The chief of staff appends the run to `decisions/runs.md`, moves the open questions to
+   `decisions/open.md`, and records JP's rulings in `decisions/log.md`. Then it commits the
+   planning-docs paths it touched and runs `bin/sync`. A new chief-of-staff session starts by
+   reading those three files.
+
+### Guardrails
+
+- **Read-only.** Reviewers and researchers change no file in a code repo. No department commits,
+  pushes, posts or deploys. Each department's Bash runs behind `.claude/hooks/department-guard.mjs`,
+  which blocks git writes, GitHub and Jira writes, deploy commands and the pushing form of
+  `bin/sync`. It is a seatbelt, not a sandbox; the rule is this section. Claude Code runs an
+  agent's frontmatter hooks only when it trusts this folder, so open the folder once on each
+  machine and accept the trust dialog. On 2026-11-04, a headless run in an untrusted cloud
+  container skipped the guard. With the folder trusted, the guard blocked the same command.
+- **Only JP posts.** Agents draft the exact text and name the platform and the target ("Jira
+  comment on WOR-19721", "GitHub review on GAPartners/worksight#14550"). Creating a Jira issue also
+  needs JP's two confirmations (`feedback-jira-no-new-tickets-without-double-confirm` in planning-docs'
+  `claude-rules/memory/`).
+- **Sources.** Every external claim carries its source URL, followed by
+  `Checked against our code: <repo> <path:line> @ <sha>: holds | differs | not applicable`. If it
+  was not checked, say "not checked" and why. Marks: **[P]** primary source fetched and read,
+  **[S]** search summary or second-hand only, **[L]** our code, **[I]** our inference.
+- **No employee data.** None in prompts, research files, fixtures, seeds or screenshots kept in a
+  repo. This is HRIS. Use synthetic data: the accounts in planning-docs' `test-users.md`, and seed
+  ids in the 9_000_000 band. The trimmed staging dump holds real PII; it never feeds a fixture, a
+  research file or a prompt. Transcripts and briefs name colleagues: keep that material in
+  planning-docs, and never copy it into Jira, a PR, Teams or gna-brain.
+- **Teams versus subagents.** Use agent teams only for adversarial review passes. Turn them on for
+  that one session with `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`, never in a shared settings file:
+  while it is on, any subagent Claude names starts as a teammate. Use subagents for everything else.
+  Subagents may nest up to three levels below the main session. The deepest chain here is chief of
+  staff, then pr-reviewer, then research-director, then research-director's parallel passes.
+- **One severity scale** for every reviewer:
+  - **P0**: data loss, a security hole, or wrong data users see now. Stop the merge or the flag.
+  - **P1**: wrong behaviour a user or QA will hit, or a rollout hazard. Fix before the flag goes on.
+  - **P2**: a latent defect or a spec gap. Batch it.
+  - **P3**: hygiene or a nit.
+
+  Each finding also says **visible today**, **visible when `<flag>` is on**, or **latent**. Its
+  evidence is **[v]** (re-read by the author and holds), **[a]** (from a helper agent only) or **[i]**
+  (inference, not run). A finding would block Anvil only if it is correctness, security, data loss or
+  missing tests *and* comes with a reproduction that ran.

@@ -37,4 +37,12 @@ Set `WS_QA_EMAIL` and `WS_QA_PASSWORD`: in the cloud environment's variables for
 or in your shell profile on a laptop. Then `bin/ws-login staging` (or `dev`) gives a headless
 session that the QA tooling reuses. Re-run it after 30 idle minutes.
 
+## The agent org
+
+`.claude/agents/` holds a chief of staff and nine departments (research, PR review, security,
+schema parity, QA, Anvil cards, Jira status, release runbooks, meeting notes). Type `/cos` in any
+session to make it the chief of staff, or run `claude --agent chief-of-staff` here on a laptop.
+Departments write drafts to planning-docs and never post; JP posts. The org chart, the hand-off
+contract and the guardrails are in [CLAUDE.md](CLAUDE.md), section "The org".
+
 Rules for where files go and how each repo is pushed are in [CLAUDE.md](CLAUDE.md).

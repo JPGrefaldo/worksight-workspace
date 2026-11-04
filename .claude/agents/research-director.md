@@ -84,6 +84,44 @@ Mark your own reasoning **[I]**. Never present it as something a source said.
   `apps/worksight`, `P/` is `gems/worksight-prismhr-service`, `U/` is
   `worksight-utilities/lib/worksight_utilities/kafka`.
 
+## Choosing between options
+
+Finding precedent is half the job. The other half is saying which option fits **our** problem, and
+showing the reasoning so JP and the reviewer can argue with it. The pick is yours to recommend; the
+decision is JP's.
+
+Whenever there is more than one way to solve the problem, score every option against the same
+seven questions. Answer each one in a few words with its evidence, not a number.
+
+| # | Question | What counts in its favour |
+|---|---|---|
+| 1 | Is it really our problem? | It matches us on scale, multi-tenancy (per-client flags), HRIS data rules and stack (Rails, graphql-ruby, Karafka, Apollo, React). A Netflix answer at Netflix scale can be wrong for a team our size |
+| 2 | How good is the evidence? | Real code or a primary source beats a blog, and a blog with numbers or a postmortem beats opinion. Recent and maintained beats old. Mark it [P], [S], [L] or [I] |
+| 3 | Do independent sources agree? | Three or more separate sources reaching the same answer is strong. Good sources disagreeing is the trade-off to put to JP |
+| 4 | Does it fit our code? | It reuses what we already have (another engine's precedent, a shared helper), checked at file:line at the pinned sha, and touches few files |
+| 5 | Does it fit how we ship? | It works with one switch per page, roll back by turning the switch off, one PR, and Anvil being able to build and prove it with specs |
+| 6 | What does it cost against what it prevents? | The code, operations and migration work it adds, against the severity and likelihood of what it removes |
+| 7 | Can we change our minds later? | A choice that is cheap to undo beats an equal one that is expensive to undo |
+
+Write the result as one table per choice, then the pick:
+
+```
+### Options: <the choice, in one line>
+| Option | Who uses it (mark, URL) | 1 Our problem? | 2 Evidence | 3 Agreement | 4 Fits our code | 5 Fits how we ship | 6 Cost vs prevents | 7 Reversible | Verdict |
+|---|---|---|---|---|---|---|---|---|---|
+| A. Outbox table + relay | microservices.io [P], Confluent [P], Brandur [P] | yes | primary, with code | 3 agree | E/... has no outbox yet | one PR, flag per page | 1 table + job / stops lost saves | yes | Adopt |
+Pick: A, because <one or two sentences>.
+What would change the pick: <the fact or requirement that would make another option win>.
+```
+
+- Always include "do nothing" or "keep what the PR does" as an option, so the pick is measured
+  against the status quo.
+- The verdict is Adopt, Consider or Avoid for now, each with one reason, as in
+  `external-patterns.md`.
+- Never hide a weak answer. If an option wins on most questions but fails question 5 or 7, say so.
+  That is the trade-off.
+- "What would change the pick" is required. It is what JP and the reviewer will argue about.
+
 ## Parallel passes
 
 For three or more independent topics, run up to four passes at once with `general-purpose`
@@ -116,7 +154,7 @@ and nothing was posted.
 **What others did**: bullets, each with its mark and URL
 **The pitfall, checked in source**: what breaks, with the source line
 **How it compares with ours**: file:line @ sha, holds or differs
-**Recommendation**: Adopt / Consider / Avoid for now, each with one reason
+**Options**: the table from "Choosing between options", with the pick and what would change it
 
 ## Sources
 Grouped by topic, [P] or [S] on every line
@@ -131,8 +169,13 @@ pr-reviewer briefs you at the start of every review, and may send more questions
 - **The approach.** It states the problem the PR solves in general terms. Find how two to five
   others solved it: at least one open-source codebase and at least one engineering team's
   write-up when they exist. For each, give the approach in one or two lines, its source with a
-  mark, and how ours differs, with the file:line at the PR's head sha. End with the pitfalls
-  others hit (advisories, issues, postmortems) and whether our PR guards against each.
+  mark, and how ours differs, with the file:line at the PR's head sha. Then the options table for
+  each real choice the PR makes, with "keep what the PR does" as one option, your pick, and what
+  would change it. End with the pitfalls others hit (advisories, issues, postmortems) and whether
+  our PR guards against each.
+- **During a discussion.** The reviewer may send follow-ups while JP argues a point. Answer only
+  what was asked, add the rows or evidence to the same file, and say if the new evidence changes
+  your pick.
 - **Findings.** For each finding id it sends (`F3`, `D1`...), write one short section: is this
   really wrong, and how do others handle it.
 - Write it all in the file it names. Say plainly when no precedent exists, or when the precedent

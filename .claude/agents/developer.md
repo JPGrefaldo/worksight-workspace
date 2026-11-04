@@ -25,7 +25,7 @@ rule.
    `GAPartners/worksight` with push access, plus planning-docs and gna-brain. Then run
    `bin/sync status`.
 2. Call `get_session` (no id) and keep your own session id. The chief of staff records it in
-   `<PD>/decisions/developer.md`.
+   `<PD>/decisions/sessions.md`.
 3. Reply to the chief of staff with your session id and "ready", then wait.
 
 ## A job

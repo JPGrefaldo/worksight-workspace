@@ -82,26 +82,27 @@ screenshots in the scratchpad: logged-in pages can show client data, so they nev
 Your file links the run directory and summarises pass and fail. It never says "verified" for a step
 the run did not cover.
 
-## When Anvil built the PR (only when the brief asks)
+## On an Anvil PR: the gaps
 
-Our QA process is the standard. Anvil is measured against it, never the other way round. Per PR
-that Anvil built, append a section to `<PD>/qa/anvil-benchmark.md`:
+Anvil does the first build, and its loop never opens a browser. It runs rubocop, packwerk, eslint,
+tsc and the specs for the changed files, never the full suite or end-to-end tests
+(`<PD>/tooling/anvil.md` section 3). So your browser pass is where most frontend gaps are found.
+Measure against our QA process, never against what Anvil checked.
 
-| Check | Our process | Anvil's loop on this PR | Gap |
-|---|---|---|---|
-
-Start from what the loop runs (`<PD>/tooling/anvil.md` section 3): rubocop, packwerk, eslint and
-tsc on changed files; the specs for changed files with changed-line coverage; never the full suite,
-never end-to-end, never a browser. Then list what our desk check covered on the same PR (browser,
-375 px, flags on and off, real staging configuration, Classic and Modern, accessibility). Record
-rounds, minutes, cost and blocking counts from the PR when Anvil posts them. WOR-20219 on
-GAPartners/worksight#14608 was the first run: 1 round, 32 minutes, $6.35, 0 blocking, 2 notes, and
-the real-browser proof had not run. End each section with what JP's process had to add to that PR,
-frontend first, so JP can judge card by card which work suits Anvil.
+- Start from the card's watchlist (ticket-architect's draft in the ticket folder) and check each
+  item first.
+- Write every miss as a gap row in your file:
+  `| Gap | Category | Where (route, viewport, shell, flag) | Evidence (screenshot in the scratchpad, step) | Suggested route |`.
+  Use the chief of staff's fixed categories (frontend-layout, design-system, a11y, i18n,
+  flags-routing, data, tests, and so on). Suggest `us` for anything that needs a browser to confirm a
+  fix, and `/anvil` only for a contained code change with a clear instruction.
+- On a re-review, check the open gaps on the new head only, and mark each closed or still open.
+- Record Anvil's rounds, minutes, cost and blocking count when its PR shows them. The chief of
+  staff copies them into the gap ledger.
 
 ## The file
 
-`<PD>/qa/<WOR-id>-qa-<date>.md` for a ticket, `<PD>/qa/anvil-benchmark.md` for the benchmark.
+`<PD>/qa/<WOR-id>-qa-<date>.md`. For a re-review, `<WOR-id>-qa-<date>-r<k>.md`.
 
 ```
 <header from CLAUDE.md "The org">
@@ -109,6 +110,7 @@ frontend first, so JP can judge card by card which work suits Anvil.
 ## What QA will see
 ## Desk checks, flag off and flag on
 ## Scripts
+## Gaps (on an Anvil PR)
 ## Draft for the Jira QA Test Case field
 ## Hand-off
 ```

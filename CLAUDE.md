@@ -128,13 +128,27 @@ subagents defined in `.claude/agents/<role>.md`. They load at session start in e
 that starts from this repo: every cloud session, and a laptop session started in this folder.
 Departments draft. They never post, commit, push or deploy.
 
-**This is JP's personal orchestration.** Its reference is JP's own way of working: the planning
-docs, the tech-check gate, desk checks, review rounds and the decision log. Anvil is not the
-model. It is one route, for ticket-driven work, chosen card by card. It is weak on frontend: its
-loop never opens a browser, and design-system, layout, accessibility and Classic/Modern problems
-get through it. So frontend work, and the browser proof for any change, stays with JP's own
-process. Only ticket-architect applies Anvil's intake rules, and only to a card that JP is
-sending to Anvil.
+**This is JP's personal orchestration, and Anvil is its first builder.** A ticket goes to Anvil for
+the first execution. The org then finds what Anvil missed and closes each gap. It measures against
+JP's bar, not Anvil's. Anvil's loop never opens a browser, and its reviewer sees only the PR
+description, the acceptance criteria and `.claude/rules/`. So the gaps sit in frontend, in
+browser-only behaviour, and in anything those three cannot show. The flow:
+
+1. **Card.** ticket-architect shapes the card for Anvil's intake and lists what Anvil is likely
+   to miss. JP adds the label.
+2. **First build.** Anvil opens the PR and runs its loop.
+3. **Gap review, in parallel.**
+   - pr-reviewer reviews the code and looks outside it: how GitHub projects, FAANG and other
+     companies solved the same problem.
+   - qa-lead runs the browser proof.
+   - security-reviewer and parity-guard run when the diff calls for them.
+4. **Gap list.** The chief of staff merges the findings into one gap list. Each gap gets a route:
+   `/anvil` (a rework line JP posts), `us` (fixed in JP's own session on the PR branch) or
+   `follow-up`.
+5. **Re-review.** The departments check the gaps on each new head until no P0 or P1 is open. Then
+   the desk check runs.
+6. **Ledger.** Every gap goes into a ledger. A gap that keeps recurring becomes a proposed
+   `.claude/rules/` file, so Anvil's next run catches it.
 
 **Starting a chief of staff.** In any session, type `/cos`, optionally followed by the ask. The main
 session reads `.claude/agents/chief-of-staff.md` and acts as that agent. On a laptop,
@@ -149,13 +163,13 @@ folder" is the planning folder that already exists for that ticket (`HRIS-ESS-MI
 
 | Role | Job | Writes to | Model |
 |---|---|---|---|
-| chief-of-staff | Routes work, keeps the decision log, commits planning-docs. Never writes code | `decisions/` | inherit |
+| chief-of-staff | Routes work, merges each PR's gap list, keeps the decision log and the gap ledger, commits planning-docs. Never writes code | `decisions/`, `pr-reviews/*-gaps.md`, `pr-reviews/anvil-gap-ledger.md` | inherit |
 | research-director | Finds how others solved the same problem, then checks each finding against our code at file:line | `<project>/research/`, else `research/` | opus |
-| pr-reviewer | Meticulous, read-only review. Gets precedent from research-director. Rates severity, marks visible or latent | `pr-reviews/` | opus |
+| pr-reviewer | Meticulous, read-only review of the code and outside it: how GitHub projects, FAANG and other companies solved the same problem (through research-director). Rates severity, marks visible or latent, names each gap's route | `pr-reviews/` | opus |
 | security-reviewer | HRIS checklist: PII in Kafka messages, encryption, keyed hashes, XSS, authorization, test data | `pr-reviews/` (`-security` suffix) | opus |
 | parity-guard | Schema parity between the monolith and the engine (type, nullability, arguments, enums), and the flag routing matrix | `qa/` | opus |
 | qa-lead | "What QA will see", flag-off and flag-on desk checks, the QA boundary, the browser proof | `qa/` | opus |
-| ticket-architect | Shapes and splits cards, recommends who builds each one, and runs Anvil's intake lint only on cards going to Anvil | the ticket folder, else `cards/` | opus |
+| ticket-architect | Shapes and splits cards for Anvil's first run, lints them before JP adds the label, and lists what Anvil is likely to miss | the ticket folder, else `cards/` | opus |
 | program-manager | Read-only Jira: stale blockers, missing owners, dependencies written as prose | `status/` | sonnet |
 | release-devex | Per-environment steps, rollout order, rollback runbooks | the ticket folder, else `runbooks/` | sonnet |
 | scribe | Sync transcripts into timestamped decisions, tech-check drafts in the Q format | `meeting-briefs/`, the ticket folder | sonnet |

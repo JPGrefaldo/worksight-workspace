@@ -77,7 +77,7 @@ Per page, and per operation on it, which endpoint serves the request:
 # Parity and routing: <pages> (<date>, <sha>)
 How the schemas were read: dump | runner | static
 ## Findings
-| # | Sev | Visibility | Evidence | Coordinate or route | Monolith | Engine | Fix in one line |
+| # | Sev | Visibility | Evidence | Coordinate or route | Monolith | Engine | Fix in one line | Route |
 ## Schema parity, per page
 ## Flag routing matrix
 ## Specs that would catch this next time

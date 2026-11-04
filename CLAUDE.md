@@ -119,3 +119,167 @@ Pulls are fast-forward only. A repo with uncommitted tracked changes is skipped,
 `push: auto` repo that diverged is rebased, and a conflict aborts the rebase and is reported. A
 `push: manual` repo that diverged is only reported. A repo whose `origin` does not match
 `repos.json` is skipped.
+
+## The org: JP's agent company
+
+JP is the CEO and approves every write. A **chief-of-staff** session takes JP's asks, orchestrates
+Anvil, routes work to the departments below, and keeps the decision log. Departments are subagents
+defined in `.claude/agents/<role>.md`. They load at session start in every session that starts from
+this repo: every cloud session, and a laptop session started in this folder. Departments draft.
+They never post, commit, push or deploy. The **developer** is the sole engineer: one standing
+cloud session that the chief of staff sends jobs to. It is the only role that changes code.
+
+**This is JP's personal orchestration, and Anvil is its first builder.** Every ticket goes to Anvil
+for the first execution, and the org orchestrates Anvil: it drafts and creates the ticket, adds
+the label and posts the `/anvil` rework lines, each on JP's approval. The org then finds what Anvil missed and closes each gap. It measures against
+JP's bar, not Anvil's. Anvil's loop never opens a browser, and its reviewer sees only the PR
+description, the acceptance criteria and `.claude/rules/`. So the gaps sit in frontend, in
+browser-only behaviour, and in anything those three cannot show. The flow:
+
+1. **Card.** ticket-architect shapes the card for Anvil's intake and lists what Anvil is likely
+   to miss. The chief of staff creates it after JP's two confirmations, and adds the label on his
+   go.
+2. **First build.** Anvil opens the PR and runs its loop. The chief of staff subscribes to the PR.
+   It is the PR's only watcher.
+3. **Gap review, in parallel.**
+   - pr-reviewer, in the PR's own session, reviews the code and looks outside it: how GitHub
+     projects, FAANG and other companies solved the same problem. JP can open that session and
+     argue the trade-offs.
+   - qa-lead runs the browser proof.
+   - security-reviewer and parity-guard run when the diff calls for them.
+4. **Gap list.** The chief of staff merges the findings into one gap list, and JP approves a route
+   for each gap:
+   - `/anvil`: a rework line the chief of staff posts;
+   - `developer`: a job for the developer session, fixed on the PR branch;
+   - `follow-up`: a new ticket, back to step 1.
+
+   Anvil and the developer never work the same PR at once.
+5. **Re-review.** The departments check the gaps on each new head until no P0 or P1 is open. Then
+   the desk check runs.
+6. **Ledger.** Every gap goes into a ledger. A gap that keeps recurring becomes a proposed
+   `.claude/rules/` file, so Anvil's next run catches it.
+
+**Starting a chief of staff.** In a cloud session, type `/cos`, optionally followed by the ask. The
+main session reads `.claude/agents/chief-of-staff.md` and acts as that agent. Keep that session
+open: it is the standing chief of staff and the watcher for every Anvil PR. If it ends, the next
+`/cos` session takes over from `decisions/sessions.md` and subscribes to every open PR again. On a
+laptop, `claude --agent chief-of-staff` from this folder does the same and also enforces the agent's
+tool list. Any session may still call one department directly ("use the pr-reviewer agent on
+GAPartners/worksight#14550"). The contract below applies either way.
+
+**Which agents are sessions.**
+
+| Agent | Runs as | How many | Watches PRs? |
+|---|---|---|---|
+| chief-of-staff | A standing session JP keeps open | 1 | Yes, every Anvil PR, and it is the only one |
+| developer | A standing session the chief of staff starts | 1 | No; the chief of staff sends it jobs |
+| pr-reviewer | One session per Anvil PR, started at the gap review and archived after the merge once JP is done with it | at most 3 at once; the rest queue | No; the chief of staff wakes it on each new head |
+| every other department | A subagent of the chief of staff, or of the reviewer session for research-director | as needed | No |
+
+GitHub delivers a PR's events to one session only, so a second subscriber takes them away from the
+first. That is why only the chief of staff subscribes. Sessions talk in one-line messages that
+point at a file in planning-docs. The file is the record.
+
+`<PD>` is the planning-docs clone: `/home/user/worksight-planning-docs` in a cloud session, or the
+path `bin/sync status` reports on a laptop. Every output path below is inside `<PD>`. "The ticket
+folder" is the planning folder that already exists for that ticket (`HRIS-ESS-MIGRATION/wor-19721/`,
+`WOR-16945/`). Create a top-level `WOR-XXXXX/` only when none exists.
+
+| Role | Job | Writes to | Model |
+|---|---|---|---|
+| chief-of-staff | The standing session and the only PR watcher. Orchestrates Anvil (tickets, label, `/anvil` lines, each on JP's OK), routes work, merges each PR's gap list, sends jobs to the developer, keeps the decision log and the gap ledger. Never writes code | `decisions/`, `jobs/`, `pr-reviews/*-gaps.md`, `pr-reviews/anvil-gap-ledger.md` | inherit |
+| developer | The sole engineer. A standing cloud session that takes jobs (gap fixes on Anvil's PRs, failing-spec reproductions, spikes, Claude's own open PRs) and pushes only to the branch a job names | the job's PR branch (code), the job file's `## Result` | opus |
+| research-director | Finds how others solved the same problem, checks each finding against our code at file:line, and ranks the options with seven questions and a pick | `<project>/research/`, else `research/` | opus |
+| pr-reviewer | One session per Anvil PR, so JP can discuss trade-offs. Meticulous, read-only review of the code and outside it: how GitHub projects, FAANG and other companies solved the same problem (through research-director). Rates severity, marks visible or latent, names each gap's route | `pr-reviews/` | opus |
+| security-reviewer | HRIS checklist: PII in Kafka messages, encryption, keyed hashes, XSS, authorization, test data | `pr-reviews/` (`-security` suffix) | opus |
+| parity-guard | Schema parity between the monolith and the engine (type, nullability, arguments, enums), and the flag routing matrix | `qa/` | opus |
+| qa-lead | "What QA will see", flag-off and flag-on desk checks, the QA boundary, the browser proof | `qa/` | opus |
+| ticket-architect | Shapes and splits cards for Anvil's first run, lints them before the label goes on, and lists what Anvil is likely to miss | the ticket folder, else `cards/` | opus |
+| program-manager | Read-only Jira: stale blockers, missing owners, dependencies written as prose | `status/` | sonnet |
+| release-devex | Per-environment steps, rollout order, rollback runbooks | the ticket folder, else `runbooks/` | sonnet |
+| scribe | Sync transcripts into timestamped decisions, tech-check drafts in the Q format | `meeting-briefs/`, the ticket folder | sonnet |
+
+**Contractors** that departments may call: planning-docs' brief agents (`weekly-scrum-brief`,
+`training-session-brief`, `teams-channel-brief`, `patterns-harvester`) and the monolith's read-side
+agents (`code-review-plus` in local-notes mode, `regression-guard`, `qa-runner`, `jira-fetcher`,
+`deployment-tracker`, `Explore`). The monolith's Jira writers (`jira-creator`, `jira-updater`,
+`jira-commenter`, `jira-epic-*`, `jira-feature-updater`) are off limits to every department.
+
+### Hand-off contract
+
+Sessions and subagents share no memory, so files are the only hand-off.
+
+1. **Brief.** The chief of staff gives a department, in its spawn prompt, the ask, the ticket or
+   PR, the output path, the files to read first, and what is already ruled out.
+2. **One file.** The department writes one file at that path. It starts with this header and ends
+   with a `## Hand-off` section:
+
+   ```
+   ---
+   role: pr-reviewer
+   ask: Review GAPartners/worksight#14550, round 3
+   ticket: WOR-19721            # or none
+   pr: GAPartners/worksight#14550   # or none
+   date: 2026-11-04
+   code_checked: GAPartners/worksight jpgrefaldo/WOR-19721-v2 @ b45d9a36e6   # or none
+   status: done                 # done | partial | blocked
+   ---
+   ```
+
+   `## Hand-off` has four items: **Answer** (three lines at most); **For JP to decide** (numbered,
+   each with a recommendation and the alternative, or "none"); **Next** (which department should
+   pick this up, with what ask, or "none"); **Not done** (what was skipped, and why).
+3. **Short reply.** The department replies with the file's path and its Answer lines, nothing
+   else. The chief of staff reads the file, not the reply.
+4. **Jobs.** Work for the developer is a job file, `jobs/<WOR-id>-<slug>.md`, in planning-docs.
+   The chief of staff writes it and sends one line pointing at it. The developer fills in its
+   `## Result` and sends one line back. The file is the hand-off, not the message.
+5. **Log.** The chief of staff appends the run to `decisions/runs.md`, moves the open questions to
+   `decisions/open.md`, and records JP's rulings in `decisions/log.md`. Then it commits the
+   planning-docs paths it touched and runs `bin/sync`. A new chief-of-staff session starts by
+   reading those three files.
+
+### Guardrails
+
+- **Read-only.** Reviewers and researchers change no file in a code repo. No department commits,
+  pushes, posts or deploys. The developer is the one exception for code. It commits and pushes
+  only to the PR branch its job names, never opens a PR, and never force-pushes. Each department's Bash runs behind `.claude/hooks/department-guard.mjs`,
+  which blocks git writes, GitHub and Jira writes, deploy commands and the pushing form of
+  `bin/sync`. It is a seatbelt, not a sandbox; the rule is this section. Claude Code runs an
+  agent's frontmatter hooks only when it trusts this folder, so open the folder once on each
+  machine and accept the trust dialog. On 2026-11-04, a headless run in an untrusted cloud
+  container skipped the guard. With the folder trusted, the guard blocked the same command.
+- **JP approves every write.** The chief of staff carries out only the Anvil orchestration writes
+  JP approves, one action at a time:
+  - create or edit the ticket, with his two confirmations for a create
+    (`feedback-jira-no-new-tickets-without-double-confirm` in planning-docs' `claude-rules/memory/`);
+  - add the Anvil label and issue links;
+  - post `/anvil` lines.
+
+  The developer pushes only the job commits JP approved. Everything else, such as Jira comments,
+  PR reviews, replies and Teams, is drafted with the platform and the target named ("Jira comment
+  on WOR-19721", "GitHub review on GAPartners/worksight#14550"), and JP posts it. Nobody but JP
+  approves or merges a PR.
+- **Sources.** Every external claim carries its source URL, followed by
+  `Checked against our code: <repo> <path:line> @ <sha>: holds | differs | not applicable`. If it
+  was not checked, say "not checked" and why. Marks: **[P]** primary source fetched and read,
+  **[S]** search summary or second-hand only, **[L]** our code, **[I]** our inference.
+- **No employee data.** None in prompts, research files, fixtures, seeds or screenshots kept in a
+  repo. This is HRIS. Use synthetic data: the accounts in planning-docs' `test-users.md`, and seed
+  ids in the 9_000_000 band. The trimmed staging dump holds real PII; it never feeds a fixture, a
+  research file or a prompt. Transcripts and briefs name colleagues: keep that material in
+  planning-docs, and never copy it into Jira, a PR, Teams or gna-brain.
+- **Teams versus subagents.** Use agent teams only for adversarial review passes. Turn them on for
+  that one session with `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`, never in a shared settings file:
+  while it is on, any subagent Claude names starts as a teammate. Use subagents for everything else.
+  Subagents may nest up to three levels below the main session. The deepest chain here is chief of
+  staff, then pr-reviewer, then research-director, then research-director's parallel passes.
+- **One severity scale** for every reviewer:
+  - **P0**: data loss, a security hole, or wrong data users see now. Stop the merge or the flag.
+  - **P1**: wrong behaviour a user or QA will hit, or a rollout hazard. Fix before the flag goes on.
+  - **P2**: a latent defect or a spec gap. Batch it.
+  - **P3**: hygiene or a nit.
+
+  Each finding also says **visible today**, **visible when `<flag>` is on**, or **latent**. Its
+  evidence is **[v]** (re-read by the author and holds), **[a]** (from a helper agent only) or **[i]**
+  (inference, not run). A P0 or P1 blocks the merge, whoever built the PR.

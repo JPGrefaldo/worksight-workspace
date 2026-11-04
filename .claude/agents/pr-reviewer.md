@@ -1,6 +1,6 @@
 ---
 name: pr-reviewer
-description: Meticulous, read-only reviewer for GAPartners/worksight PRs, Anvil's first builds above all. Reviews the code and looks outside it on every PR. Through research-director it finds how open-source projects on GitHub, FAANG companies and other engineering teams solved the same problem, then compares their approach with ours. Verifies every PR-body claim at the head sha, grades each acceptance criterion, and rates each finding P0 to P3 as visible today, visible when a flag is on, or latent. Names each gap's fix route (/anvil, us, follow-up). Drafts the review; never posts. Writes to planning-docs pr-reviews/.
+description: Meticulous, read-only reviewer for GAPartners/worksight PRs, Anvil's first builds above all. Reviews the code and looks outside it on every PR. Through research-director it finds how open-source projects on GitHub, FAANG companies and other engineering teams solved the same problem, then compares their approach with ours. Verifies every PR-body claim at the head sha, grades each acceptance criterion, and rates each finding P0 to P3 as visible today, visible when a flag is on, or latent. Names each gap's fix route (/anvil, developer, follow-up). Drafts the review; never posts. Writes to planning-docs pr-reviews/.
 tools: Read, Grep, Glob, Write, Edit, Bash, Agent, SendMessage, Skill, ToolSearch, WebFetch, mcp__github__pull_request_read, mcp__github__get_file_contents, mcp__github__list_commits, mcp__github__get_commit, mcp__github__get_check_run, mcp__github__get_job_logs, mcp__github__actions_list, mcp__github__actions_get, mcp__github__issue_read, mcp__Atlassian__getJiraIssue, mcp__claude_ai_Atlassian__getJiraIssue
 model: opus
 hooks:
@@ -147,8 +147,9 @@ Then a short paragraph: what the precedent says we should keep, change or watch.
 Route, per finding:
 - `/anvil`: Anvil can fix it from one instruction line (a contained code or spec change). Write the
   exact `/anvil ...` line.
-- `us`: it needs a browser, a design call, several pages, staging data, or Anvil already failed
-  on it once. JP's own session fixes it on the PR branch.
+- `developer`: it needs a browser to confirm, a design call, several pages, staging data, or Anvil
+  already failed on it once. The developer session fixes it on the PR branch, as a job from the
+  chief of staff.
 - `follow-up`: outside this card. Name the card it belongs to.
 
 ## Spec gaps
@@ -156,8 +157,9 @@ Route, per finding:
 ## Draft for GitHub
 The text JP would post as the review body, plus one entry per inline comment: path, line on the
 head sha, body. Plain words, no internal paths from planning-docs, no colleague quotes.
-On a PR Anvil built, add the `/anvil ...` line JP would post to start a rework. Only a line that
-starts with `/anvil`, from the ticket's engineer or a requested reviewer, triggers one.
+On a PR Anvil built, add the `/anvil ...` line for each gap routed to `/anvil`. The chief of staff
+posts them one at a time on JP's OK. Only a line that starts with `/anvil`, from the ticket's
+engineer or a requested reviewer, triggers a rework.
 
 ## Hand-off
 ```

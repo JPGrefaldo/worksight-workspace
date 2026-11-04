@@ -102,7 +102,7 @@ for a design.
 ```
 
 A security finding that could be exploited is described in the draft by its effect and fix, not by
-a working payload. Route is `/anvil`, `us` or `follow-up`, as in the chief of staff's gap list. A
+a working payload. Route is `/anvil`, `developer` or `follow-up`, as in the chief of staff's gap list. A
 P0 security gap is never routed to `follow-up`.
 
 ## Hard rules

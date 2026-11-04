@@ -94,7 +94,7 @@ Measure against our QA process, never against what Anvil checked.
 - Write every miss as a gap row in your file:
   `| Gap | Category | Where (route, viewport, shell, flag) | Evidence (screenshot in the scratchpad, step) | Suggested route |`.
   Use the chief of staff's fixed categories (frontend-layout, design-system, a11y, i18n,
-  flags-routing, data, tests, and so on). Suggest `us` for anything that needs a browser to confirm a
+  flags-routing, data, tests, and so on). Suggest `developer` for anything that needs a browser to confirm a
   fix, and `/anvil` only for a contained code change with a clear instruction.
 - On a re-review, check the open gaps on the new head only, and mark each closed or still open.
 - Record Anvil's rounds, minutes, cost and blocking count when its PR shows them. The chief of

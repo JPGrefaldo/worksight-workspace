@@ -142,9 +142,9 @@ browser-only behaviour, and in anything those three cannot show. The flow:
 2. **First build.** Anvil opens the PR and runs its loop. The chief of staff subscribes to the PR.
    It is the PR's only watcher.
 3. **Gap review, in parallel.**
-   - pr-reviewer, in the PR's own session, reviews the code and looks outside it: how GitHub
-     projects, FAANG and other companies solved the same problem. JP can open that session and
-     argue the trade-offs.
+   - pr-reviewer, in the one standing reviewer session, reviews the code and looks outside it:
+     how GitHub projects, FAANG and other companies solved the same problem. The chief of staff
+     passes it each PR in turn, and JP can open that session to argue the trade-offs.
    - qa-lead runs the browser proof.
    - security-reviewer and parity-guard run when the diff calls for them.
 4. **Gap list.** The chief of staff merges the findings into one gap list, and JP approves a route
@@ -173,11 +173,13 @@ GAPartners/worksight#14550"). The contract below applies either way.
 |---|---|---|---|
 | chief-of-staff | A standing session JP keeps open | 1 | Yes, every Anvil PR, and it is the only one |
 | developer | A standing session the chief of staff starts | 1 | No; the chief of staff sends it jobs |
-| pr-reviewer | One session per Anvil PR, started at the gap review and archived after the merge once JP is done with it | at most 3 at once; the rest queue | No; the chief of staff wakes it on each new head |
+| pr-reviewer | A standing session the chief of staff starts once and passes every ticket or PR to, one at a time | 1 | No; the chief of staff passes it each PR and each new head |
 | every other department | A subagent of the chief of staff, or of the reviewer session for research-director | as needed | No |
 
-GitHub delivers a PR's events to one session only, so a second subscriber takes them away from the
-first. That is why only the chief of staff subscribes. Sessions talk in one-line messages that
+Each chief of staff has exactly one developer session and one reviewer session, and reuses them
+from `decisions/sessions.md`; it never starts one per PR. GitHub delivers a PR's events to one
+session only, so a second subscriber takes them away from the first. That is why only the chief of
+staff subscribes. Sessions talk in one-line messages that
 point at a file in planning-docs. The file is the record.
 
 `<PD>` is the planning-docs clone: `/home/user/worksight-planning-docs` in a cloud session, or the
@@ -190,7 +192,7 @@ folder" is the planning folder that already exists for that ticket (`HRIS-ESS-MI
 | chief-of-staff | The standing session and the only PR watcher. Orchestrates Anvil (tickets, label, `/anvil` lines, each on JP's OK), routes work, merges each PR's gap list, sends jobs to the developer, keeps the decision log and the gap ledger. Never writes code | `decisions/`, `jobs/`, `pr-reviews/*-gaps.md`, `pr-reviews/anvil-gap-ledger.md` | inherit |
 | developer | The sole engineer. A standing cloud session that takes jobs (gap fixes on Anvil's PRs, failing-spec reproductions, spikes, Claude's own open PRs) and pushes only to the branch a job names | the job's PR branch (code), the job file's `## Result` | opus |
 | research-director | Finds how others solved the same problem, checks each finding against our code at file:line, and ranks the options with seven questions and a pick | `<project>/research/`, else `research/` | opus |
-| pr-reviewer | One session per Anvil PR, so JP can discuss trade-offs. Meticulous, read-only review of the code and outside it: how GitHub projects, FAANG and other companies solved the same problem (through research-director). Rates severity, marks visible or latent, names each gap's route | `pr-reviews/` | opus |
+| pr-reviewer | One standing session that reviews every ticket and PR in turn, and where JP discusses the trade-offs. Meticulous, read-only review of the code and outside it: how GitHub projects, FAANG and other companies solved the same problem (through research-director). Rates severity, marks visible or latent, names each gap's route | `pr-reviews/` | opus |
 | security-reviewer | HRIS checklist: PII in Kafka messages, encryption, keyed hashes, XSS, authorization, test data | `pr-reviews/` (`-security` suffix) | opus |
 | parity-guard | Schema parity between the monolith and the engine (type, nullability, arguments, enums), and the flag routing matrix | `qa/` | opus |
 | qa-lead | "What QA will see", flag-off and flag-on desk checks, the QA boundary, the browser proof | `qa/` | opus |

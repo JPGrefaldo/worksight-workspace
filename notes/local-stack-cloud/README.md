@@ -1,0 +1,47 @@
+# Running `./up.sh all prismhr` in a Claude Code cloud session (2026-11-07)
+
+Worked on GAPartners/worksight `development` @ `0d08b67e`. Nothing tracked in worksight changes; every
+workaround lives in a compose override and scratch files. Git-ignored files that up.sh itself writes:
+`.env`, `infra/docker/.env.local-secrets`, `apps/worksight/public/assets/esbuild/`.
+
+## Why plain `./up.sh` fails here
+
+| Blocker | Cause | Workaround used |
+|---|---|---|
+| No Docker daemon | not started in the container | `nohup dockerd &` |
+| apt in image builds: 405 | session proxy refuses plain HTTP | patched copies of `ruby.Dockerfile` / `node.Dockerfile`: proxy CA + `https://` apt sources; build once with `docker build --network host` and proxy build args |
+| Containers have no internet | only the host reaches the proxy (127.0.0.1); exposing it on 0.0.0.0 is blocked | only the one-shot gem job (`worksight-deps`) runs `network_mode: host` with proxy env; everything else stays on the compose network |
+| Private gem repos: 401 | proxy authorizes only repos attached to the session | `add_repo` (read) for active-gql, active_record_validation_sets, worksight-notifications, worksight-performance-management, worksight-service-generator, worksight-utilities, worksight_api, worksight_linearb (two_factor_authentication is public) |
+| `@gapartners/*` npm packages: 401 | GitHub Packages needs NPM_GITHUB_TOKEN (read:packages); the session has none | public npm packages installed from a copy of package.json without `@gapartners/*` (`yarn-public.sh`); the esbuild bundles copied from the development environment (`crawl_esb.py`) |
+| Hosted pilet feed unreachable from containers | same as above | `crawl.py` mirrors the hosted feed (incl. webpack chunk maps); `mirror-server.mjs` serves it on the compose network as `PILET_FEED_UPSTREAM` |
+| up.sh requires both tokens and tests the npm token against GitHub | preflight | placeholder values in the shell only (never used: gems installed, yarn skipped); run up.sh with a PATH that hides `curl`, which up.sh uses only for that test |
+| Compose Bake refuses `build.network: host` | Bake default | override builds point at the patched Dockerfiles without host network (images already built and cached) |
+
+**Permanent fix:** an `NPM_GITHUB_TOKEN` with `read:packages` as an environment secret. Then yarn,
+the asset build and pilet builds run normally, and the esbuild copy and npm subset are not needed.
+
+## Steps
+
+1. `nohup dockerd &`; attach the gem repos above (read).
+2. Build `worksight-ruby:3.3.13` and `worksight-node:22.23.4` from the patched Dockerfiles (host network, proxy args).
+3. `docker network create worksight-shared`; `docker volume create worksight-bundle worksight-yarn-berry worksight-yarn-classic`.
+4. Fetch `/api/v1/pilets` from the hosted feed into `mirror/api/v1/pilets`, then `python3 -I crawl.py <feed> mirror mirror/api/v1/pilets`.
+5. Fetch `https://worksight-development.gnapartners.com/assets/esbuild/.manifest.json` into `esbuild/`, then `python3 -I crawl_esb.py https://worksight-development.gnapartners.com/assets/esbuild esbuild`.
+6. `python3 -I gen_override.py <stack dir> "$HTTPS_PROXY"` (needs `/tmp/claude-0/compose.json` = `COMPOSE_PROFILES='*' docker compose config --format json`).
+7. `COMPOSE_FILE=docker-compose.yml:<stack dir>/override.yml NPM_GITHUB_TOKEN=unused BUNDLE_GITHUB__COM=x-access-token:unused PATH=<dir without curl>:/usr/sbin:/sbin ./up.sh all prismhr`
+8. Public npm packages into `worksight_worksight_node_modules` with `yarn-public.sh` (Sprockets needs jstz and friends).
+9. Sign in: `WS_QA_EMAIL=persona-employee@gnapartners.com WS_QA_PASSWORD=devteamtest! bin/ws-login http://localhost:3000`.
+10. Flags: `flags-off.rb` / `flags-on.rb` via `docker compose exec -T worksight bin/rails runner`; screenshots with `node shoot-local.js <out> <label>`.
+
+## What the screenshots showed (employee persona, client 1)
+
+| Page | Main app, flags off | Main app, flags on | Pilet (both) |
+|---|---|---|---|
+| 1095-C | main app (needs `SHOW_1095_C_FORM`) | main app only, no engine call seen | main app `/graphql` |
+| Tax Withholding | main app | main app only, no engine call seen | main app |
+| Life Events | main app | **engine** `/hris/graphql` + main app | main app |
+| Pay History | crashes: `pay_history_controller.rb:12` paginates a nil voucher list (the fake has no voucher endpoint) | same | renders "no records" from the main app |
+| Organization | main app, error banner | **engine** + main app, same banner | main app |
+
+The pilet never calls the engine with the flags on: that is cards 1 to 5 of the pilet plan
+(`worksight-planning-docs/HRIS-ESS-MIGRATION/wor-19720/pilet-plan-2026-11-06.md`).

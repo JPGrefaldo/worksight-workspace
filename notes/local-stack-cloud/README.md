@@ -12,13 +12,16 @@ workaround lives in a compose override and scratch files. Git-ignored files that
 | apt in image builds: 405 | session proxy refuses plain HTTP | patched copies of `ruby.Dockerfile` / `node.Dockerfile`: proxy CA + `https://` apt sources; build once with `docker build --network host` and proxy build args |
 | Containers have no internet | only the host reaches the proxy (127.0.0.1); exposing it on 0.0.0.0 is blocked | only the one-shot gem job (`worksight-deps`) runs `network_mode: host` with proxy env; everything else stays on the compose network |
 | Private gem repos: 401 | proxy authorizes only repos attached to the session | `add_repo` (read) for active-gql, active_record_validation_sets, worksight-notifications, worksight-performance-management, worksight-service-generator, worksight-utilities, worksight_api, worksight_linearb (two_factor_authentication is public) |
-| `@gapartners/*` npm packages: 401 | GitHub Packages needs NPM_GITHUB_TOKEN (read:packages); the session has none | public npm packages installed from a copy of package.json without `@gapartners/*` (`yarn-public.sh`); the esbuild bundles copied from the development environment (`crawl_esb.py`) |
+| `@gapartners/*` npm packages: 401 | GitHub Packages needs NPM_GITHUB_TOKEN (read:packages); the session has none | **Fixed 2026-11-07:** read `NPM_GITHUB_TOKEN` from the `worksight-development` Heroku config (`heroku config:get`, never production) into `~/.cache/worksight-qa/npm-github-token` (mode 600, outside every repo, never printed), then the normal `worksight-deps` (`bundle` + `yarn install`) and `worksight-assets` (`yarn build --local`) run. The older fallback (`yarn-public.sh` + `crawl_esb.py`, dev's bundles) is kept only for a session without Heroku access |
 | Hosted pilet feed unreachable from containers | same as above | `crawl.py` mirrors the hosted feed (incl. webpack chunk maps); `mirror-server.mjs` serves it on the compose network as `PILET_FEED_UPSTREAM` |
 | up.sh requires both tokens and tests the npm token against GitHub | preflight | placeholder values in the shell only (never used: gems installed, yarn skipped); run up.sh with a PATH that hides `curl`, which up.sh uses only for that test |
 | Compose Bake refuses `build.network: host` | Bake default | override builds point at the patched Dockerfiles without host network (images already built and cached) |
 
-**Permanent fix:** an `NPM_GITHUB_TOKEN` with `read:packages` as an environment secret. Then yarn,
-the asset build and pilet builds run normally, and the esbuild copy and npm subset are not needed.
+**Permanent fix:** an `NPM_GITHUB_TOKEN` with `read:packages` as an environment secret, so no session has to
+read it from Heroku. `up.sh`'s token preflight still needs the hidden-`curl` run: it tests `BUNDLE_GITHUB__COM`
+too, and reading that second credential from Heroku was not done.
+
+Heroku CLI: not installed in the image; `npm install -g heroku@10`, which uses `HEROKU_API_KEY` from the env.
 
 ## Steps
 
@@ -29,7 +32,7 @@ the asset build and pilet builds run normally, and the esbuild copy and npm subs
 5. Fetch `https://worksight-development.gnapartners.com/assets/esbuild/.manifest.json` into `esbuild/`, then `python3 -I crawl_esb.py https://worksight-development.gnapartners.com/assets/esbuild esbuild`.
 6. `python3 -I gen_override.py <stack dir> "$HTTPS_PROXY"` (needs `/tmp/claude-0/compose.json` = `COMPOSE_PROFILES='*' docker compose config --format json`).
 7. `COMPOSE_FILE=docker-compose.yml:<stack dir>/override.yml NPM_GITHUB_TOKEN=unused BUNDLE_GITHUB__COM=x-access-token:unused PATH=<dir without curl>:/usr/sbin:/sbin ./up.sh all prismhr`
-8. Public npm packages into `worksight_worksight_node_modules` with `yarn-public.sh` (Sprockets needs jstz and friends).
+8. `NPM_GITHUB_TOKEN="$(cat ~/.cache/worksight-qa/npm-github-token)" WS_BUNDLE_WITHOUT=sidekiq_enterprise docker compose run --rm --no-deps -e NPM_GITHUB_TOKEN worksight-deps`, then `docker compose run --rm --no-deps worksight-assets` and `docker compose restart worksight`.
 9. Sign in: `WS_QA_EMAIL=persona-employee@gnapartners.com WS_QA_PASSWORD=devteamtest! bin/ws-login http://localhost:3000`.
 10. Flags: `flags-off.rb` / `flags-on.rb` via `docker compose exec -T worksight bin/rails runner`; screenshots with `node shoot-local.js <out> <label>`.
 

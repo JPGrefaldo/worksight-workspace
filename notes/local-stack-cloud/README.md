@@ -48,3 +48,17 @@ Heroku CLI: not installed in the image; `npm install -g heroku@10`, which uses `
 
 The pilet never calls the engine with the flags on: that is cards 1 to 5 of the pilet plan
 (`worksight-planning-docs/HRIS-ESS-MIGRATION/wor-19720/pilet-plan-2026-11-06.md`).
+
+## Trimmed staging DB (planning-docs `tooling/cloud-db-subset/trim/dumps/`), 2026-11-07
+
+Real staging data, not scrubbed: screenshots stay in the scratchpad, never in a repo, Jira, a PR or Teams.
+
+1. `docker cp <dump>.sql.gz worksight-db-1:/tmp/trimmed.sql.gz`, then in the db container:
+   `createdb -U postgres local_container_trimmed && gunzip -c /tmp/trimmed.sql.gz | grep -v '^SET transaction_timeout' | psql -U postgres -X -q -v ON_ERROR_STOP=1 -d local_container_trimmed` (21 s).
+2. `WS_DB_SUFFIX=_trimmed docker compose up -d --no-deps worksight`: `prepare-db.sh` migrates it to the checkout. The synthetic `local_container` stays untouched.
+3. Sign in: staging passwords are unknown, so `trimmed-user.rb` sets the local stack password on test user 19327 (Juna Agost) in the local copy only (it aborts on any other database).
+4. If `/api/v1/pilets` answers 503 with `getaddrinfo` for `pilet-server`, Docker's DNS lost the name after the app container was recreated: `docker restart worksight-pilet-server-1`.
+
+Result (client 268, flags on): 1095-C, Tax Withholding, Life Events, Organization and My Profile call `/hris/graphql`;
+every pilet page still calls only `/graphql`. PrismHR-backed reads fail ("Client 3269 does not exist") because the
+fake knows only its own synthetic clients.
